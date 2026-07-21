@@ -33,8 +33,8 @@ jobs:
           $version = [string]$request.version
           $sourceCommit = [string]$request.sourceCommit
 
-          if ($version -notmatch '^2\.0\.0-alpha\.[0-9]+$') {
-            throw "Unsupported TechBench version: $version"
+          if ($version -notmatch '^[0-9]+\.[0-9]+\.[0-9]+$') {
+            throw "TechBench releases must use a stable three-part version such as 5.0.1: $version"
           }
           if ($sourceCommit -notmatch '^[0-9a-f]{40}$') {
             throw 'sourceCommit must be one complete lowercase Git commit SHA.'
