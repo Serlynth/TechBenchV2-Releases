@@ -1,0 +1,77 @@
+name: Publish TechBench release
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - release-request.json
+      - .github/workflows/publish-techbench.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: techbench-release
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: windows-latest
+    timeout-minutes: 45
+
+    steps:
+      - name: Check out release request
+        uses: actions/checkout@v4
+
+      - name: Read release request
+        id: request
+        shell: pwsh
+        run: |
+          $request = Get-Content -Raw release-request.json | ConvertFrom-Json
+          $version = [string]$request.version
+          $sourceCommit = [string]$request.sourceCommit
+
+          if ($version -notmatch '^2\.0\.0-alpha\.[0-9]+$') {
+            throw "Unsupported TechBench version: $version"
+          }
+          if ($sourceCommit -notmatch '^[0-9a-f]{40}$') {
+            throw 'sourceCommit must be one complete lowercase Git commit SHA.'
+          }
+
+          "version=$version" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+          "source_commit=$sourceCommit" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+
+      - name: Check out exact TechBench source
+        uses: actions/checkout@v4
+        with:
+          repository: Serlynth/TechBenchV2
+          ref: ${{ steps.request.outputs.source_commit }}
+          path: source
+          fetch-depth: 0
+
+      - name: Set up .NET 8
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Publish client installer and update feed
+        shell: pwsh
+        working-directory: source
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          .\scripts\Publish-TechBenchRelease.ps1 `
+            -Version '${{ steps.request.outputs.version }}' `
+            -Publish
+
+      - name: Publish Server Setup, service, and SQL installer
+        shell: pwsh
+        working-directory: source
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          .\scripts\Publish-TechBenchServer.ps1 `
+            -Version '${{ steps.request.outputs.version }}' `
+            -Publish
